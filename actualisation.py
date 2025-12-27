@@ -201,29 +201,59 @@ with col_map:
     map_data = st_folium(m, height=500, returned_objects=["all_drawings"], use_container_width=True)
 
     # Polygon-based pie chart under map
-    if map_data and "all_drawings" in map_data and map_data["all_drawings"]:
-        last_feature = map_data["all_drawings"][-1]
+   if map_data and "all_drawings" in map_data and map_data["all_drawings"]:
+    last_feature = map_data["all_drawings"][-1]
+
+    if last_feature and "geometry" in last_feature:
         drawn_polygon = shape(last_feature["geometry"])
-        if drawn_polygon is not None and points_gdf is not None:
+
+        if drawn_polygon.is_valid and points_gdf is not None and not points_gdf.empty:
             pts_in_polygon = points_gdf[points_gdf.geometry.within(drawn_polygon)]
-            if not pts_in_polygon.empty:
-                m_poly = int(pts_in_polygon["Masculin"].sum()) if "Masculin" in pts_in_polygon.columns else 0
-                f_poly = int(pts_in_polygon["Feminin"].sum()) if "Feminin" in pts_in_polygon.columns else 0
-                st.subheader("🟢 Points inside drawn polygon")
-                st.markdown(f"- 👨 **M**: {m_poly}  \n- 👩 **F**: {f_poly}  \n- 👥 **Total**: {m_poly+f_poly}")
 
-                #fig_poly, ax_poly = plt.subplots(figsize=(1,1))
-                #ax_poly.pie([m_poly,f_poly], labels=["M","F"], autopct="%1.1f%%", startangle=90)
-                #ax_poly.axis("equal")
-                #st.pyplot(fig_poly)
+            st.subheader("🟢 Drawn polygon statistics")
+
+            if pts_in_polygon.empty:
+                st.info("No points inside the drawn polygon.")
             else:
-                st.info("No points inside drawn polygon.")
+                # Safe numeric conversion
+                m_poly = (
+                    pd.to_numeric(pts_in_polygon.get("Masculin"), errors="coerce")
+                    .fillna(0)
+                    .sum()
+                )
+                f_poly = (
+                    pd.to_numeric(pts_in_polygon.get("Feminin"), errors="coerce")
+                    .fillna(0)
+                    .sum()
+                )
 
-with col_chart:
-    # Existing SE charts remain unchanged
-    if idse_selected=="No filter":
-        st.info("Select SE.")
-    else:
+                total_poly = int(m_poly + f_poly)
+
+                # --- TEXT STATISTICS ---
+                st.markdown(
+                    f"""
+                    - 👨 **Masculin**: {int(m_poly)}
+                    - 👩 **Feminin**: {int(f_poly)}
+                    - 👥 **Total**: {total_poly}
+                    """
+                )
+
+                # --- PIE CHART ---
+                fig, ax = plt.subplots(figsize=(3, 3))
+                if total_poly > 0:
+                    ax.pie(
+                        [m_poly, f_poly],
+                        labels=["Masculin", "Feminin"],
+                        autopct="%1.1f%%",
+                        startangle=90,
+                        textprops={"fontsize": 10},
+                    )
+                else:
+                    ax.pie([1], labels=["No data"], colors=["lightgrey"])
+
+                ax.axis("equal")
+                st.pyplot(fig)
+
         # Population bar chart
         st.subheader("📊 Population")
         df_long = gdf_idse[["idse_new","pop_se","pop_se_ct"]].copy()
@@ -266,6 +296,7 @@ st.markdown("""
 **Geospatial Enterprise Web Mapping** Developed with Streamlit, Folium & GeoPandas  
 ** Mahamdou CAMARA,st PhD – Geomatics Engineering** © 2025
 """)
+
 
 
 
