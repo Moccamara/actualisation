@@ -212,9 +212,9 @@ with col_map:
                 st.subheader("🟢 Points inside drawn polygon")
                 st.markdown(f"- 👨 **M**: {m_poly}  \n- 👩 **F**: {f_poly}  \n- 👥 **Total**: {m_poly+f_poly}")
 
-                #fig_poly, ax_poly = plt.subplots(figsize=(1,1))
-                #ax_poly.pie([m_poly,f_poly], labels=["M","F"], autopct="%1.1f%%", startangle=90)
-                #ax_poly.axis("equal")
+                fig_poly, ax_poly = plt.subplots(figsize=(1,1))
+                ax_poly.pie([m_poly,f_poly], labels=["M","F"], autopct="%1.1f%%", startangle=90)
+                ax_poly.axis("equal")
                 #st.pyplot(fig_poly)
             else:
                 st.info("No points inside drawn polygon.")
@@ -266,5 +266,6 @@ st.markdown("""
 **Geospatial Enterprise Web Mapping** Developed with Streamlit, Folium & GeoPandas  
 ** Mahamdou CAMARA,st PhD – Geomatics Engineering** © 2025
 """)
+
 
 
