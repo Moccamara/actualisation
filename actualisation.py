@@ -222,25 +222,20 @@ folium.LayerControl(collapsed=True).add_to(m)
 # LAYOUT
 # =========================================================
 col_map, col_chart = st.columns((3,1), gap="small")
-
 with col_map:
-    map_data = st_folium(
-        m,
-        height=500,
-        returned_objects=["all_drawings"],
-        use_container_width=True
-    )
+    # Display map and capture drawn polygons
+    map_data = st_folium(m, height=500, returned_objects=["all_drawings"], use_container_width=True)
 
+    # Polygon-based statistics (no pie, just table)
     if map_data and "all_drawings" in map_data and map_data["all_drawings"]:
         last_feature = map_data["all_drawings"][-1]
         drawn_polygon = shape(last_feature["geometry"])
-
         if drawn_polygon is not None and points_gdf is not None:
             pts_in_polygon = points_gdf[points_gdf.geometry.within(drawn_polygon)]
             st.subheader("🟢 Points inside drawn polygon")
             st.markdown(f"- Total points: {len(pts_in_polygon)}")
-
             if not pts_in_polygon.empty:
+                # Display counts by attributes if exist
                 attr_cols = [c for c in ["Masculin","Feminin"] if c in pts_in_polygon.columns]
                 if attr_cols:
                     stats = pts_in_polygon[attr_cols].sum().to_frame().T
@@ -250,57 +245,43 @@ with col_map:
                     st.dataframe(pts_in_polygon)
 
 with col_chart:
-    if idse_selected == "No filter":
+    # Population bar chart
+    if idse_selected=="No filter":
         st.info("Select SE.")
     else:
         st.subheader("📊 Population")
-
         df_long = gdf_idse[["idse_new","pop_se","pop_se_ct"]].copy()
         df_long["idse_new"] = df_long["idse_new"].astype(str)
-        df_long = df_long.melt(
-            id_vars="idse_new",
-            value_vars=["pop_se","pop_se_ct"],
-            var_name="Variable",
-            value_name="Population"
-        )
-        df_long["Variable"] = df_long["Variable"].replace({
-            "pop_se":"Pop SE",
-            "pop_se_ct":"Pop Actu"
-        })
-
-        chart = (
-            alt.Chart(df_long)
-            .mark_bar()
-            .encode(
-                x=alt.X("idse_new:N", title=None),
-                xOffset="Variable:N",
-                y=alt.Y("Population:Q", title=None),
-                color=alt.Color("Variable:N", legend=alt.Legend(title="Type")),
-                tooltip=["idse_new","Variable","Population"]
-            )
-            .properties(height=150)
-        )
+        df_long = df_long.melt(id_vars="idse_new", value_vars=["pop_se","pop_se_ct"],
+                               var_name="Variable", value_name="Population")
+        df_long["Variable"] = df_long["Variable"].replace({"pop_se":"Pop SE","pop_se_ct":"Pop Actu"})
+        chart = (alt.Chart(df_long)
+                 .mark_bar()
+                 .encode(x=alt.X("idse_new:N", title=None, axis=alt.Axis(labelAngle=0)),
+                         xOffset="Variable:N",
+                         y=alt.Y("Population:Q", title=None),
+                         color=alt.Color("Variable:N", legend=alt.Legend(orient="right", title="Type")),
+                         tooltip=["idse_new","Variable","Population"])
+                 .properties(height=150))
         st.altair_chart(chart, use_container_width=True)
 
+        # Sex pie chart for selected SE
         st.subheader("👥 Sex (M / F) in selected SE")
         if points_gdf is not None and {"Masculin","Feminin"}.issubset(points_gdf.columns):
             gdf_idse_simple = gdf_idse.explode(ignore_index=True)
-            pts_inside = safe_sjoin(points_gdf, gdf_idse_simple)
-
-            m_total = int(pts_inside["Masculin"].sum()) if not pts_inside.empty else 0
-            f_total = int(pts_inside["Feminin"].sum()) if not pts_inside.empty else 0
-
-            st.markdown(
-                f"- 👨 **M**: {m_total}\n"
-                f"- 👩 **F**: {f_total}\n"
-                f"- 👥 **Total**: {m_total + f_total}"
-            )
-
+            pts_inside = safe_sjoin(points_gdf, gdf_idse_simple, predicate="intersects")
+            if not pts_inside.empty:
+                m_total = int(pts_inside["Masculin"].sum())
+                f_total = int(pts_inside["Feminin"].sum())
+            else:
+                m_total, f_total = 0,0
+            st.markdown(f"- 👨 **M**: {m_total}  \n- 👩 **F**: {f_total}  \n- 👥 **Total**: {m_total+f_total}")
+            
             fig, ax = plt.subplots(figsize=(3,3))
             if m_total + f_total > 0:
-                ax.pie([m_total,f_total], labels=["M","F"], autopct="%1.1f%%", startangle=90)
+                ax.pie([m_total,f_total], labels=["M","F"], autopct="%1.1f%%", startangle=90, colors=["#1f77b4","#ff7f0e"])
             else:
-                ax.pie([1], labels=["No data"])
+                ax.pie([1], labels=["No data"], colors=["lightgrey"])
             ax.axis("equal")
             st.pyplot(fig)
 
@@ -312,3 +293,4 @@ st.markdown("""
 **Geospatial Enterprise Web Mapping** Developed with Streamlit, Folium & GeoPandas  
 **Dr. CAMARA MOC, PhD – Geomatics Engineering** © 2025
 """)
+
