@@ -2,7 +2,7 @@ import streamlit as st
 import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
-from folium.plugins import MeasureControl, Draw, MousePosition  # <-- added MousePosition
+from folium.plugins import MeasureControl, Draw, MousePosition
 import pandas as pd
 import altair as alt
 import matplotlib.pyplot as plt
@@ -193,7 +193,7 @@ if points_to_plot is not None:
 MeasureControl().add_to(m)
 Draw(export=True).add_to(m)
 
-# 🔹 Show cursor coordinates on map
+# 🔹 Show cursor coordinates dynamically on map
 MousePosition(
     position="bottomright",
     separator=" | ",
