@@ -31,34 +31,32 @@ if "auth_ok" not in st.session_state:
     st.session_state.user_role = None
     st.session_state.points_gdf = None
 
-# ------------------------------
-# LOGIN / LOGOUT in sidebar
-# ------------------------------
-with st.sidebar:
-    st.image("logo/logo_wgv.png", width=200)
-    
-    if not st.session_state.get("auth_ok", False):
-        st.header("🔐 Login")
-        username = st.selectbox("User", list(USERS.keys()))
-        password = st.text_input("Password", type="password")
-        if st.button("Login"):
-            if password == USERS[username]["password"]:
-                st.session_state.auth_ok = True
-                st.session_state.username = username
-                st.session_state.user_role = USERS[username]["role"]
-                st.success(f"Logged in as {username}")
-                st.stop()  # stop here to reload the page with session state
-            else:
-                st.error("❌ Incorrect password")
-        st.stop()  # prevent the rest of the app from loading before login
-    else:
-        st.markdown(f"**Logged in as:** {st.session_state.username} ({st.session_state.user_role})")
-        if st.button("Logout"):
-            # reset session state
-            for key in ["auth_ok", "username", "user_role", "points_gdf"]:
-                if key in st.session_state:
-                    del st.session_state[key]
-            st.stop()  # stop here to reload the app after logout
+# =========================================================
+# LOGOUT
+# =========================================================
+def logout():
+    st.session_state.auth_ok = False
+    st.session_state.username = None
+    st.session_state.user_role = None
+    st.session_state.points_gdf = None
+    st.experimental_rerun()
+
+# =========================================================
+# LOGIN
+# =========================================================
+if not st.session_state.auth_ok:
+    st.sidebar.header("🔐 Login")
+    username = st.sidebar.selectbox("User", list(USERS.keys()))
+    password = st.sidebar.text_input("Password", type="password")
+    if st.sidebar.button("Login"):
+        if password == USERS[username]["password"]:
+            st.session_state.auth_ok = True
+            st.session_state.username = username
+            st.session_state.user_role = USERS[username]["role"]
+            st.stop()
+        else:
+            st.sidebar.error("❌ Incorrect password")
+    st.stop()
 
 
 # =========================================================
@@ -296,6 +294,7 @@ st.markdown("""
 **Geospatial Enterprise Web Mapping** Developed with Streamlit, Folium & GeoPandas  
 **Dr. CAMARA MOC, PhD – Geomatics Engineering** © 2025
 """)
+
 
 
 
