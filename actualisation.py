@@ -2,7 +2,7 @@ import streamlit as st
 import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
-from folium.plugins import MeasureControl, Draw, MousePosition
+from folium.plugins import MeasureControl, Draw, MousePosition  # ✅ ADDED
 import pandas as pd
 import altair as alt
 import matplotlib.pyplot as plt
@@ -123,7 +123,10 @@ else:
 # =========================================================
 def safe_sjoin(points, polygons, how="inner", predicate="intersects"):
     if points is None or points.empty or polygons is None or polygons.empty:
-        return gpd.GeoDataFrame(columns=points.columns if points is not None else [], crs=points.crs if points is not None else None)
+        return gpd.GeoDataFrame(
+            columns=points.columns if points is not None else [],
+            crs=points.crs if points is not None else None
+        )
     for col in ["index_right", "_r"]:
         if col in polygons.columns:
             polygons = polygons.drop(columns=[col])
@@ -141,8 +144,10 @@ with st.sidebar:
     st.markdown("### 🗂️ Attribute Query")
     region = st.selectbox("Region", sorted(gdf["region"].dropna().unique()))
     gdf_r = gdf[gdf["region"] == region]
+
     cercle = st.selectbox("Cercle", sorted(gdf_r["cercle"].dropna().unique()))
     gdf_c = gdf_r[gdf_r["cercle"] == cercle]
+
     commune = st.selectbox("Commune", sorted(gdf_c["commune"].dropna().unique()))
     gdf_commune = gdf_c[gdf_c["commune"] == commune]
 
@@ -156,10 +161,9 @@ with st.sidebar:
     pts_inside_map = None
     if st.session_state.user_role=="Admin":
         st.markdown("### 🛰️ Spatial Query")
-        query_type = st.selectbox("Spatial Query Type", ["Points inside selected SE"])
         run_query = st.button("Run Spatial Query")
         if run_query and points_gdf is not None:
-            pts_inside_map = safe_sjoin(points_gdf, gdf_idse, predicate="intersects", how="inner")
+            pts_inside_map = safe_sjoin(points_gdf, gdf_idse, predicate="intersects")
             st.success(f"✅ Spatial query returned {len(pts_inside_map)} points inside selected SE.")
 
 # =========================================================
@@ -167,12 +171,14 @@ with st.sidebar:
 # =========================================================
 minx, miny, maxx, maxy = gdf_idse.total_bounds
 m = folium.Map(location=[(miny+maxy)/2, (minx+maxx)/2], zoom_start=18)
+
 folium.TileLayer("OpenStreetMap").add_to(m)
 folium.TileLayer(
     tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     name="Satellite",
     attr="Esri"
 ).add_to(m)
+
 m.fit_bounds([[miny,minx],[maxy,maxx]])
 
 folium.GeoJson(
@@ -187,21 +193,27 @@ points_to_plot = pts_inside_map if (st.session_state.user_role=="Admin" and pts_
 if points_to_plot is not None:
     points_to_plot = points_to_plot.to_crs(gdf_idse.crs)
     for _, r in points_to_plot.iterrows():
-        folium.CircleMarker(location=[r.geometry.y,r.geometry.x], radius=3,
-                            color="red", fill=True, fill_opacity=0.8).add_to(m)
+        folium.CircleMarker(
+            location=[r.geometry.y, r.geometry.x],
+            radius=3,
+            color="red",
+            fill=True,
+            fill_opacity=0.8
+        ).add_to(m)
 
 MeasureControl().add_to(m)
 Draw(export=True).add_to(m)
 
-# ============================
-# Dynamic cursor coordinates
-# ============================
+# =========================================================
+# ✅ LIVE CURSOR COORDINATES (ADDED)
+# =========================================================
 MousePosition(
     position="bottomright",
     separator=" | ",
-    prefix="Coordinates:",
-    lat_formatter="function(num) {return L.Util.formatNum(num, 6);}",
-    lng_formatter="function(num) {return L.Util.formatNum(num, 6);}"
+    empty_string="Move cursor",
+    lng_first=True,
+    num_digits=6,
+    prefix="Coordinates:"
 ).add_to(m)
 
 folium.LayerControl(collapsed=True).add_to(m)
@@ -210,20 +222,25 @@ folium.LayerControl(collapsed=True).add_to(m)
 # LAYOUT
 # =========================================================
 col_map, col_chart = st.columns((3,1), gap="small")
-with col_map:
-    # Display map and capture drawn polygons
-    map_data = st_folium(m, height=500, returned_objects=["all_drawings"], use_container_width=True)
 
-    # Polygon-based statistics (no pie, just table)
+with col_map:
+    map_data = st_folium(
+        m,
+        height=500,
+        returned_objects=["all_drawings"],
+        use_container_width=True
+    )
+
     if map_data and "all_drawings" in map_data and map_data["all_drawings"]:
         last_feature = map_data["all_drawings"][-1]
         drawn_polygon = shape(last_feature["geometry"])
+
         if drawn_polygon is not None and points_gdf is not None:
             pts_in_polygon = points_gdf[points_gdf.geometry.within(drawn_polygon)]
             st.subheader("🟢 Points inside drawn polygon")
             st.markdown(f"- Total points: {len(pts_in_polygon)}")
+
             if not pts_in_polygon.empty:
-                # Display counts by attributes if exist
                 attr_cols = [c for c in ["Masculin","Feminin"] if c in pts_in_polygon.columns]
                 if attr_cols:
                     stats = pts_in_polygon[attr_cols].sum().to_frame().T
@@ -233,43 +250,57 @@ with col_map:
                     st.dataframe(pts_in_polygon)
 
 with col_chart:
-    # Population bar chart
-    if idse_selected=="No filter":
+    if idse_selected == "No filter":
         st.info("Select SE.")
     else:
         st.subheader("📊 Population")
+
         df_long = gdf_idse[["idse_new","pop_se","pop_se_ct"]].copy()
         df_long["idse_new"] = df_long["idse_new"].astype(str)
-        df_long = df_long.melt(id_vars="idse_new", value_vars=["pop_se","pop_se_ct"],
-                               var_name="Variable", value_name="Population")
-        df_long["Variable"] = df_long["Variable"].replace({"pop_se":"Pop SE","pop_se_ct":"Pop Actu"})
-        chart = (alt.Chart(df_long)
-                 .mark_bar()
-                 .encode(x=alt.X("idse_new:N", title=None, axis=alt.Axis(labelAngle=0)),
-                         xOffset="Variable:N",
-                         y=alt.Y("Population:Q", title=None),
-                         color=alt.Color("Variable:N", legend=alt.Legend(orient="right", title="Type")),
-                         tooltip=["idse_new","Variable","Population"])
-                 .properties(height=150))
+        df_long = df_long.melt(
+            id_vars="idse_new",
+            value_vars=["pop_se","pop_se_ct"],
+            var_name="Variable",
+            value_name="Population"
+        )
+        df_long["Variable"] = df_long["Variable"].replace({
+            "pop_se":"Pop SE",
+            "pop_se_ct":"Pop Actu"
+        })
+
+        chart = (
+            alt.Chart(df_long)
+            .mark_bar()
+            .encode(
+                x=alt.X("idse_new:N", title=None),
+                xOffset="Variable:N",
+                y=alt.Y("Population:Q", title=None),
+                color=alt.Color("Variable:N", legend=alt.Legend(title="Type")),
+                tooltip=["idse_new","Variable","Population"]
+            )
+            .properties(height=150)
+        )
         st.altair_chart(chart, use_container_width=True)
 
-        # Sex pie chart for selected SE
         st.subheader("👥 Sex (M / F) in selected SE")
         if points_gdf is not None and {"Masculin","Feminin"}.issubset(points_gdf.columns):
             gdf_idse_simple = gdf_idse.explode(ignore_index=True)
-            pts_inside = safe_sjoin(points_gdf, gdf_idse_simple, predicate="intersects")
-            if not pts_inside.empty:
-                m_total = int(pts_inside["Masculin"].sum())
-                f_total = int(pts_inside["Feminin"].sum())
-            else:
-                m_total, f_total = 0,0
-            st.markdown(f"- 👨 **M**: {m_total}  \n- 👩 **F**: {f_total}  \n- 👥 **Total**: {m_total+f_total}")
-            
+            pts_inside = safe_sjoin(points_gdf, gdf_idse_simple)
+
+            m_total = int(pts_inside["Masculin"].sum()) if not pts_inside.empty else 0
+            f_total = int(pts_inside["Feminin"].sum()) if not pts_inside.empty else 0
+
+            st.markdown(
+                f"- 👨 **M**: {m_total}\n"
+                f"- 👩 **F**: {f_total}\n"
+                f"- 👥 **Total**: {m_total + f_total}"
+            )
+
             fig, ax = plt.subplots(figsize=(3,3))
             if m_total + f_total > 0:
-                ax.pie([m_total,f_total], labels=["M","F"], autopct="%1.1f%%", startangle=90, colors=["#1f77b4","#ff7f0e"])
+                ax.pie([m_total,f_total], labels=["M","F"], autopct="%1.1f%%", startangle=90)
             else:
-                ax.pie([1], labels=["No data"], colors=["lightgrey"])
+                ax.pie([1], labels=["No data"])
             ax.axis("equal")
             st.pyplot(fig)
 
@@ -279,6 +310,5 @@ with col_chart:
 st.markdown("""
 ---
 **Geospatial Enterprise Web Mapping** Developed with Streamlit, Folium & GeoPandas  
-** Dr.CAMARA, PhD – Geomatics Engineering** © 2025
+**Dr. CAMARA MOC, PhD – Geomatics Engineering** © 2025
 """)
-
