@@ -39,7 +39,7 @@ def logout():
     st.session_state.username = None
     st.session_state.user_role = None
     st.session_state.points_gdf = None
-    st.experimental_rerun()
+    st.rerun()   # ✅ FIX (instead of st.experimental_rerun)
 
 # =========================================================
 # LOGIN
@@ -48,14 +48,16 @@ if not st.session_state.auth_ok:
     st.sidebar.header("🔐 Login")
     username = st.sidebar.selectbox("User", list(USERS.keys()))
     password = st.sidebar.text_input("Password", type="password")
+
     if st.sidebar.button("Login"):
         if password == USERS[username]["password"]:
             st.session_state.auth_ok = True
             st.session_state.username = username
             st.session_state.user_role = USERS[username]["role"]
-            st.stop()
+            st.rerun()   # ✅ rerun after successful login
         else:
             st.sidebar.error("❌ Incorrect password")
+
     st.stop()
 
 # =========================================================
@@ -293,4 +295,5 @@ st.markdown("""
 **Geospatial Enterprise Web Mapping** Developed with Streamlit, Folium & GeoPandas  
 **Dr. CAMARA MOC, PhD – Geomatics Engineering** © 2025
 """)
+
 
