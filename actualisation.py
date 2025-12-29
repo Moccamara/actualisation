@@ -193,7 +193,9 @@ if points_to_plot is not None:
 MeasureControl().add_to(m)
 Draw(export=True).add_to(m)
 
-# 🔹 Show cursor coordinates dynamically on map
+# ============================
+# Dynamic cursor coordinates
+# ============================
 MousePosition(
     position="bottomright",
     separator=" | ",
@@ -277,6 +279,5 @@ with col_chart:
 st.markdown("""
 ---
 **Geospatial Enterprise Web Mapping** Developed with Streamlit, Folium & GeoPandas  
-** MOC CAMARA, PhD – Geomatics Engineering** © 2025
+** CAMARA, PhD – Geomatics Engineering** © 2025
 """)
-
