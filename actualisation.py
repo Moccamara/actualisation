@@ -39,24 +39,31 @@ def logout():
     st.session_state.username = None
     st.session_state.user_role = None
     st.session_state.points_gdf = None
-    st.experimental_rerun()
+    st.rerun()   # ✅ force clean rerun
+
 
 # =========================================================
 # LOGIN
 # =========================================================
 if not st.session_state.auth_ok:
     st.sidebar.header("🔐 Login")
+
     username = st.sidebar.selectbox("User", list(USERS.keys()))
     password = st.sidebar.text_input("Password", type="password")
-    if st.sidebar.button("Login"):
+
+    if st.sidebar.button("Login", use_container_width=True):
         if password == USERS[username]["password"]:
             st.session_state.auth_ok = True
             st.session_state.username = username
             st.session_state.user_role = USERS[username]["role"]
-            st.stop()
+
+            st.success("✅ Login successful")
+            st.rerun()   # ✅ THIS is the key fix
         else:
             st.sidebar.error("❌ Incorrect password")
-    st.stop()
+
+    st.stop()   # ⛔ stop rendering rest of app UNTIL logged in
+
 
 
 # =========================================================
@@ -294,6 +301,7 @@ st.markdown("""
 **Geospatial Enterprise Web Mapping** Developed with Streamlit, Folium & GeoPandas  
 **Dr. CAMARA MOC, PhD – Geomatics Engineering** © 2025
 """)
+
 
 
 
