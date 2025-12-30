@@ -2,7 +2,7 @@ import streamlit as st
 import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
-from folium.plugins import MeasureControl, Draw, MousePosition  # ✅ ADDED
+from folium.plugins import MeasureControl, Draw, MousePosition
 import pandas as pd
 import altair as alt
 import matplotlib.pyplot as plt
@@ -39,32 +39,25 @@ def logout():
     st.session_state.username = None
     st.session_state.user_role = None
     st.session_state.points_gdf = None
-    st.rerun()   # ✅ force clean rerun
-
+    st.experimental_rerun()  # ✅ fixed
 
 # =========================================================
 # LOGIN
 # =========================================================
 if not st.session_state.auth_ok:
     st.sidebar.header("🔐 Login")
-
     username = st.sidebar.selectbox("User", list(USERS.keys()))
     password = st.sidebar.text_input("Password", type="password")
-
     if st.sidebar.button("Login", use_container_width=True):
         if password == USERS[username]["password"]:
             st.session_state.auth_ok = True
             st.session_state.username = username
             st.session_state.user_role = USERS[username]["role"]
-
             st.success("✅ Login successful")
-            st.rerun()   # ✅ THIS is the key fix
+            st.experimental_rerun()
         else:
             st.sidebar.error("❌ Incorrect password")
-
-    st.stop()   # ⛔ stop rendering rest of app UNTIL logged in
-
-
+    st.stop()
 
 # =========================================================
 # LOAD SE POLYGONS
@@ -74,10 +67,7 @@ SE_URL = "https://raw.githubusercontent.com/Moccamara/web_mapping/master/data/SE
 @st.cache_data(show_spinner=False)
 def load_se_data(url):
     gdf = gpd.read_file(url)
-    if gdf.crs is None:
-        gdf = gdf.set_crs(epsg=4326)
-    else:
-        gdf = gdf.to_crs(epsg=4326)
+    gdf = gdf.to_crs(epsg=4326) if gdf.crs else gdf.set_crs(epsg=4326)
     gdf.columns = gdf.columns.str.lower().str.strip()
     gdf = gdf.rename(columns={"lregion":"region","lcercle":"cercle","lcommune":"commune"})
     gdf = gdf[gdf.is_valid & ~gdf.is_empty]
@@ -120,21 +110,16 @@ def load_points_from_github(url):
 # =========================================================
 # POINTS SOURCE LOGIC
 # =========================================================
-if st.session_state.points_gdf is not None:
-    points_gdf = st.session_state.points_gdf
-else:
-    points_gdf = load_points_from_github(POINTS_URL)
-    st.session_state.points_gdf = points_gdf
+points_gdf = st.session_state.points_gdf or load_points_from_github(POINTS_URL)
+st.session_state.points_gdf = points_gdf
 
 # =========================================================
 # SAFE SPATIAL JOIN
 # =========================================================
 def safe_sjoin(points, polygons, how="inner", predicate="intersects"):
     if points is None or points.empty or polygons is None or polygons.empty:
-        return gpd.GeoDataFrame(
-            columns=points.columns if points is not None else [],
-            crs=points.crs if points is not None else None
-        )
+        return gpd.GeoDataFrame(columns=points.columns if points is not None else [],
+                                crs=points.crs if points is not None else None)
     for col in ["index_right", "_r"]:
         if col in polygons.columns:
             polygons = polygons.drop(columns=[col])
@@ -179,14 +164,12 @@ with st.sidebar:
 # =========================================================
 minx, miny, maxx, maxy = gdf_idse.total_bounds
 m = folium.Map(location=[(miny+maxy)/2, (minx+maxx)/2], zoom_start=18)
-
 folium.TileLayer("OpenStreetMap").add_to(m)
 folium.TileLayer(
     tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     name="Satellite",
     attr="Esri"
 ).add_to(m)
-
 m.fit_bounds([[miny,minx],[maxy,maxx]])
 
 folium.GeoJson(
@@ -211,19 +194,8 @@ if points_to_plot is not None:
 
 MeasureControl().add_to(m)
 Draw(export=True).add_to(m)
-
-# =========================================================
-# ✅ LIVE CURSOR COORDINATES (ADDED)
-# =========================================================
-MousePosition(
-    position="bottomright",
-    separator=" | ",
-    empty_string="Move cursor",
-    lng_first=True,
-    num_digits=6,
-    prefix="Coordinates:"
-).add_to(m)
-
+MousePosition(position="bottomright", separator=" | ", empty_string="Move cursor",
+              lng_first=True, num_digits=6, prefix="Coordinates:").add_to(m)
 folium.LayerControl(collapsed=True).add_to(m)
 
 # =========================================================
@@ -231,32 +203,26 @@ folium.LayerControl(collapsed=True).add_to(m)
 # =========================================================
 col_map, col_chart = st.columns((3,1), gap="small")
 with col_map:
-    # Display map and capture drawn polygons
     map_data = st_folium(m, height=500, returned_objects=["all_drawings"], use_container_width=True)
 
-    # Polygon-based statistics (no pie, just table)
-    if map_data and "all_drawings" in map_data and map_data["all_drawings"]:
-        last_feature = map_data["all_drawings"][-1]
-        drawn_polygon = shape(last_feature["geometry"])
-        if drawn_polygon is not None and points_gdf is not None:
-            pts_in_polygon = points_gdf[points_gdf.geometry.within(drawn_polygon)]
-            st.subheader("🟢 Points inside drawn polygon")
-            st.markdown(f"- Total points: {len(pts_in_polygon)}")
-            if not pts_in_polygon.empty:
-                # Display counts by attributes if exist
-                attr_cols = [c for c in ["Masculin","Feminin"] if c in pts_in_polygon.columns]
-                if attr_cols:
-                    stats = pts_in_polygon[attr_cols].sum().to_frame().T
-                    stats["Total"] = stats.sum(axis=1)
-                    st.dataframe(stats)
-                else:
-                    st.dataframe(pts_in_polygon)
+    # ✅ Safe handling of drawn polygons/points
+    drawn_points_df = pd.DataFrame(columns=["Latitude","Longitude"])
+    if map_data is not None and map_data.get("all_drawings"):
+        for feature in map_data["all_drawings"]:
+            geom = shape(feature["geometry"])
+            coords = []
+            if geom.geom_type == "Point":
+                coords.append([geom.y, geom.x])
+            elif hasattr(geom, "exterior"):
+                coords.extend([(p[1], p[0]) for p in geom.exterior.coords])
+            drawn_points_df = pd.DataFrame(coords, columns=["Latitude","Longitude"])
+    if not drawn_points_df.empty:
+        st.subheader("📝 Drawn points / polygon coordinates")
+        st.dataframe(drawn_points_df)
+        st.download_button("⬇️ Download CSV", drawn_points_df.to_csv(index=False), "drawn_coords.csv", "text/csv")
 
 with col_chart:
-    # Population bar chart
-    if idse_selected=="No filter":
-        st.info("Select SE.")
-    else:
+    if idse_selected!="No filter":
         st.subheader("📊 Population")
         df_long = gdf_idse[["idse_new","pop_se","pop_se_ct"]].copy()
         df_long["idse_new"] = df_long["idse_new"].astype(str)
@@ -273,21 +239,18 @@ with col_chart:
                  .properties(height=150))
         st.altair_chart(chart, use_container_width=True)
 
-        # Sex pie chart for selected SE
+        # Sex pie chart
         st.subheader("👥 Sex (M / F) in selected SE")
         if points_gdf is not None and {"Masculin","Feminin"}.issubset(points_gdf.columns):
             gdf_idse_simple = gdf_idse.explode(ignore_index=True)
             pts_inside = safe_sjoin(points_gdf, gdf_idse_simple, predicate="intersects")
-            if not pts_inside.empty:
-                m_total = int(pts_inside["Masculin"].sum())
-                f_total = int(pts_inside["Feminin"].sum())
-            else:
-                m_total, f_total = 0,0
+            m_total = int(pts_inside["Masculin"].sum()) if not pts_inside.empty else 0
+            f_total = int(pts_inside["Feminin"].sum()) if not pts_inside.empty else 0
             st.markdown(f"- 👨 **M**: {m_total}  \n- 👩 **F**: {f_total}  \n- 👥 **Total**: {m_total+f_total}")
-            
             fig, ax = plt.subplots(figsize=(3,3))
             if m_total + f_total > 0:
-                ax.pie([m_total,f_total], labels=["M","F"], autopct="%1.1f%%", startangle=90, colors=["#1f77b4","#ff7f0e"])
+                ax.pie([m_total,f_total], labels=["M","F"], autopct="%1.1f%%", startangle=90,
+                       colors=["#1f77b4","#ff7f0e"])
             else:
                 ax.pie([1], labels=["No data"], colors=["lightgrey"])
             ax.axis("equal")
@@ -301,8 +264,3 @@ st.markdown("""
 **Geospatial Enterprise Web Mapping** Developed with Streamlit, Folium & GeoPandas  
 **Dr. CAMARA MOC, PhD – Geomatics Engineering** © 2025
 """)
-
-
-
-
-
