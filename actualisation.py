@@ -2,7 +2,7 @@ import streamlit as st
 import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
-from folium.plugins import MeasureControl, Draw, MousePosition  # ✅ ADDED
+from folium.plugins import MeasureControl, Draw, MousePosition
 import pandas as pd
 import altair as alt
 import matplotlib.pyplot as plt
@@ -39,15 +39,13 @@ def logout():
     st.session_state.username = None
     st.session_state.user_role = None
     st.session_state.points_gdf = None
-    st.rerun()   # ✅ force clean rerun
-
+    st.rerun()
 
 # =========================================================
 # LOGIN
 # =========================================================
 if not st.session_state.auth_ok:
     st.sidebar.header("🔐 Login")
-
     username = st.sidebar.selectbox("User", list(USERS.keys()))
     password = st.sidebar.text_input("Password", type="password")
 
@@ -56,15 +54,11 @@ if not st.session_state.auth_ok:
             st.session_state.auth_ok = True
             st.session_state.username = username
             st.session_state.user_role = USERS[username]["role"]
-
             st.success("✅ Login successful")
-            st.rerun()   # ✅ THIS is the key fix
+            st.rerun()
         else:
             st.sidebar.error("❌ Incorrect password")
-
-    st.stop()   # ⛔ stop rendering rest of app UNTIL logged in
-
-
+    st.stop()
 
 # =========================================================
 # LOAD SE POLYGONS
@@ -210,10 +204,12 @@ if points_to_plot is not None:
         ).add_to(m)
 
 MeasureControl().add_to(m)
-Draw(export=True).add_to(m)
+# Add Draw plugin (both polygon and marker)
+draw_control = Draw(export=True, draw_options={"polyline": False, "rectangle": False, "circle": False, "circlemarker": False})
+draw_control.add_to(m)
 
 # =========================================================
-# ✅ LIVE CURSOR COORDINATES (ADDED)
+# ✅ LIVE CURSOR COORDINATES
 # =========================================================
 MousePosition(
     position="bottomright",
@@ -231,10 +227,41 @@ folium.LayerControl(collapsed=True).add_to(m)
 # =========================================================
 col_map, col_chart = st.columns((3,1), gap="small")
 with col_map:
-    # Display map and capture drawn polygons
-    map_data = st_folium(m, height=500, returned_objects=["all_drawings"], use_container_width=True)
+    # Display map and capture drawn polygons & markers
+    map_data = st_folium(
+        m,
+        height=500,
+        returned_objects=["all_drawings"],
+        use_container_width=True
+    )
 
-    # Polygon-based statistics (no pie, just table)
+    # ================================
+    # DYNAMIC MARKER TABLE AND CSV
+    # ================================
+    markers_list = []
+
+    if map_data and "all_drawings" in map_data and map_data["all_drawings"]:
+        for feature in map_data["all_drawings"]:
+            geom_type = feature["geometry"]["type"]
+            geom_shape = shape(feature["geometry"])
+
+            if geom_type == "Point":
+                markers_list.append((geom_shape.y, geom_shape.x))
+
+    if markers_list:
+        markers_df = pd.DataFrame(markers_list, columns=["Latitude", "Longitude"])
+        st.subheader("📍 Drawn Markers Coordinates (Dynamic Table)")
+        st.dataframe(markers_df)
+
+        csv = markers_df.to_csv(index=False)
+        st.download_button(
+            label="📥 Download Marker Coordinates CSV",
+            data=csv,
+            file_name="markers_coordinates.csv",
+            mime="text/csv"
+        )
+
+    # Polygon-based statistics (existing logic for polygons)
     if map_data and "all_drawings" in map_data and map_data["all_drawings"]:
         last_feature = map_data["all_drawings"][-1]
         drawn_polygon = shape(last_feature["geometry"])
@@ -243,7 +270,6 @@ with col_map:
             st.subheader("🟢 Points inside drawn polygon")
             st.markdown(f"- Total points: {len(pts_in_polygon)}")
             if not pts_in_polygon.empty:
-                # Display counts by attributes if exist
                 attr_cols = [c for c in ["Masculin","Feminin"] if c in pts_in_polygon.columns]
                 if attr_cols:
                     stats = pts_in_polygon[attr_cols].sum().to_frame().T
@@ -273,7 +299,7 @@ with col_chart:
                  .properties(height=150))
         st.altair_chart(chart, use_container_width=True)
 
-        # Sex pie chart for selected SE
+        # Sex pie chart
         st.subheader("👥 Sex (M / F) in selected SE")
         if points_gdf is not None and {"Masculin","Feminin"}.issubset(points_gdf.columns):
             gdf_idse_simple = gdf_idse.explode(ignore_index=True)
@@ -284,7 +310,7 @@ with col_chart:
             else:
                 m_total, f_total = 0,0
             st.markdown(f"- 👨 **M**: {m_total}  \n- 👩 **F**: {f_total}  \n- 👥 **Total**: {m_total+f_total}")
-            
+
             fig, ax = plt.subplots(figsize=(3,3))
             if m_total + f_total > 0:
                 ax.pie([m_total,f_total], labels=["M","F"], autopct="%1.1f%%", startangle=90, colors=["#1f77b4","#ff7f0e"])
