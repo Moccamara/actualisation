@@ -220,7 +220,7 @@ MousePosition(
     separator=" | ",
     empty_string="Move cursor",
     lng_first=True,
-    num_digits=6,
+    num_digits=8,
     prefix="Coordinates:"
 ).add_to(m)
 
@@ -275,7 +275,7 @@ with col_map:
             st.subheader("🟢 Points inside drawn polygon")
             st.markdown(f"- Total points: {len(pts_in_polygon)}")
             if not pts_in_polygon.empty:
-                attr_cols = [c for c in ["Masculin","Feminin"] if c in pts_in_polygon.columns]
+                attr_cols = [c for c in ["Male","Female"] if c in pts_in_polygon.columns]
                 if attr_cols:
                     stats = pts_in_polygon[attr_cols].sum().to_frame().T
                     stats["Total"] = stats.sum(axis=1)
@@ -293,7 +293,7 @@ with col_chart:
         df_long["idse_new"] = df_long["idse_new"].astype(str)
         df_long = df_long.melt(id_vars="idse_new", value_vars=["pop_se","pop_se_ct"],
                                var_name="Variable", value_name="Population")
-        df_long["Variable"] = df_long["Variable"].replace({"pop_se":"Pop SE","pop_se_ct":"Pop Actu"})
+        df_long["Variable"] = df_long["Variable"].replace({"pop_se":"Pop Ref","pop_se_ct":"Pop current"})
         chart = (alt.Chart(df_long)
                  .mark_bar()
                  .encode(x=alt.X("idse_new:N", title=None, axis=alt.Axis(labelAngle=0)),
@@ -332,3 +332,4 @@ st.markdown("""
 **Geospatial Enterprise Web Mapping** Developed with Streamlit, Folium & GeoPandas  
 **Dr. CAMARA MOC, PhD – Geomatics Engineering** © 2025
 """)
+
