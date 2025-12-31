@@ -174,24 +174,30 @@ with st.sidebar:
 minx, miny, maxx, maxy = gdf_idse.total_bounds
 m = folium.Map(location=[(miny+maxy)/2, (minx+maxx)/2], zoom_start=18)
 
+# ===== Base layers =====
 folium.TileLayer("OpenStreetMap").add_to(m)
 folium.TileLayer(
     tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     name="Satellite",
-    attr="Esri"
+    attr="Esri",
+    control=True
 ).add_to(m)
 
 m.fit_bounds([[miny,minx],[maxy,maxx]])
 
+# ===== Overlay layers =====
+# SE Polygons
+fg_idse = folium.FeatureGroup(name="SE Polygons", show=True)
 folium.GeoJson(
     gdf_idse,
-    name="IDSE",
     style_function=lambda x: {"color":"blue","weight":2,"fillOpacity":0.15},
     tooltip=folium.GeoJsonTooltip(fields=["idse_new","pop_se","pop_se_ct"])
-).add_to(m)
+).add_to(fg_idse)
+fg_idse.add_to(m)
 
-# Add points
+# Concession Points
 points_to_plot = pts_inside_map if (st.session_state.user_role=="Admin" and pts_inside_map is not None) else points_gdf
+fg_points = folium.FeatureGroup(name="Concession Points", show=True)
 if points_to_plot is not None:
     points_to_plot = points_to_plot.to_crs(gdf_idse.crs)
     for _, r in points_to_plot.iterrows():
@@ -201,16 +207,14 @@ if points_to_plot is not None:
             color="red",
             fill=True,
             fill_opacity=0.8
-        ).add_to(m)
+        ).add_to(fg_points)
+fg_points.add_to(m)
 
+# Plugins
 MeasureControl().add_to(m)
-# Add Draw plugin (both polygon and marker)
 draw_control = Draw(export=True, draw_options={"polyline": False, "rectangle": False, "circle": False, "circlemarker": False})
 draw_control.add_to(m)
 
-# =========================================================
-# ✅ LIVE CURSOR COORDINATES
-# =========================================================
 MousePosition(
     position="bottomright",
     separator=" | ",
@@ -220,6 +224,7 @@ MousePosition(
     prefix="Coordinates:"
 ).add_to(m)
 
+# ===== Dynamic Legend / LayerControl =====
 folium.LayerControl(collapsed=True).add_to(m)
 
 # =========================================================
@@ -261,7 +266,7 @@ with col_map:
             mime="text/csv"
         )
 
-    # Polygon-based statistics (existing logic for polygons)
+    # Polygon-based statistics
     if map_data and "all_drawings" in map_data and map_data["all_drawings"]:
         last_feature = map_data["all_drawings"][-1]
         drawn_polygon = shape(last_feature["geometry"])
@@ -288,7 +293,7 @@ with col_chart:
         df_long["idse_new"] = df_long["idse_new"].astype(str)
         df_long = df_long.melt(id_vars="idse_new", value_vars=["pop_se","pop_se_ct"],
                                var_name="Variable", value_name="Population")
-        df_long["Variable"] = df_long["Variable"].replace({"pop_se":"Pop SE","pop_se_ct":"Pop Actu"})
+        df_long["Variable"] = df_long["Variable"].replace({"pop_se":"Pop Ref","pop_se_ct":"Pop Current"})
         chart = (alt.Chart(df_long)
                  .mark_bar()
                  .encode(x=alt.X("idse_new:N", title=None, axis=alt.Axis(labelAngle=0)),
@@ -327,6 +332,4 @@ st.markdown("""
 **Geospatial Enterprise Web Mapping** Developed with Streamlit, Folium & GeoPandas  
 **Dr. CAMARA MOC, PhD – Geomatics Engineering** © 2025
 """)
-
-
 
