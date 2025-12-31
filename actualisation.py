@@ -330,6 +330,3 @@ st.markdown("""
 
 
 
-"Masculin","Feminin"
-
-
