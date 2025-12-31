@@ -6,7 +6,8 @@ from folium.plugins import MeasureControl, Draw, MousePosition
 import pandas as pd
 import altair as alt
 import matplotlib.pyplot as plt
-from shapely.geometry import shape
+from shapely.geometry import shape, Point
+import json
 
 # =========================================================
 # APP CONFIG
@@ -30,6 +31,7 @@ if "auth_ok" not in st.session_state:
     st.session_state.username = None
     st.session_state.user_role = None
     st.session_state.points_gdf = None
+    st.session_state.run_spatial_query = False  # <-- Added to store query state
 
 # =========================================================
 # LOGOUT
@@ -39,6 +41,7 @@ def logout():
     st.session_state.username = None
     st.session_state.user_role = None
     st.session_state.points_gdf = None
+    st.session_state.run_spatial_query = False
     st.rerun()
 
 # =========================================================
@@ -158,15 +161,24 @@ with st.sidebar:
     gdf_idse = gdf_commune if idse_selected=="No filter" else gdf_commune[gdf_commune["idse_new"]==idse_selected]
 
     # =========================================================
-    # Spatial Query (Admin only)
+    # Spatial Query (Admin only) with Run/Cancel
     # =========================================================
     pts_inside_map = None
     if st.session_state.user_role=="Admin":
         st.markdown("### 🛰️ Spatial Query")
-        run_query = st.button("Run Spatial Query")
-        if run_query and points_gdf is not None:
+        col1, col2 = st.columns([1,1])
+        with col1:
+            if st.button("Run Spatial Query"):
+                st.session_state.run_spatial_query = True
+        with col2:
+            if st.button("Cancel Spatial Query"):
+                st.session_state.run_spatial_query = False
+
+        if st.session_state.run_spatial_query and points_gdf is not None:
             pts_inside_map = safe_sjoin(points_gdf, gdf_idse, predicate="intersects")
             st.success(f"✅ Spatial query returned {len(pts_inside_map)} points inside selected SE.")
+        else:
+            pts_inside_map = None
 
 # =========================================================
 # MAP
@@ -241,7 +253,7 @@ with col_map:
     )
 
     # ================================
-    # DYNAMIC MARKER TABLE AND CSV
+    # DYNAMIC MARKER TABLE AND GEOJSON DOWNLOAD
     # ================================
     markers_list = []
 
@@ -249,22 +261,34 @@ with col_map:
         for feature in map_data["all_drawings"]:
             geom_type = feature["geometry"]["type"]
             geom_shape = shape(feature["geometry"])
-
             if geom_type == "Point":
-                markers_list.append((geom_shape.y, geom_shape.x))
+                markers_list.append({"Latitude": geom_shape.y, "Longitude": geom_shape.x, "Label": ""})
 
     if markers_list:
-        markers_df = pd.DataFrame(markers_list, columns=["Latitude", "Longitude"])
-        st.subheader("📍 Drawn Markers Coordinates (Dynamic Table)")
-        st.dataframe(markers_df)
+        markers_df = pd.DataFrame(markers_list)
+        st.subheader("📍 Marker Table (Editable Labels)")
+        edited_df = st.data_editor(markers_df, num_rows="dynamic")
 
-        csv = markers_df.to_csv(index=False)
+        # Save edited markers to GeoJSON
+        geojson_data = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [row.Longitude, row.Latitude]},
+                    "properties": {"Label": row.Label}
+                }
+                for _, row in edited_df.iterrows()
+            ]
+        }
         st.download_button(
-            label="📥 Download Marker Coordinates CSV",
-            data=csv,
-            file_name="markers_coordinates.csv",
-            mime="text/csv"
+            label="💾 Download Markers as GeoJSON",
+            data=json.dumps(geojson_data),
+            file_name="markers.geojson",
+            mime="application/json"
         )
+
+with col_chart:
 
     # Polygon-based statistics
     if map_data and "all_drawings" in map_data and map_data["all_drawings"]:
@@ -304,7 +328,9 @@ with col_chart:
                  .properties(height=150))
         st.altair_chart(chart, use_container_width=True)
 
+        # ===========================
         # Sex pie chart
+        # ===========================
         st.subheader("👥 Sex (M / F) in selected SE")
         if points_gdf is not None and {"Masculin","Feminin"}.issubset(points_gdf.columns):
             gdf_idse_simple = gdf_idse.explode(ignore_index=True)
@@ -332,4 +358,3 @@ st.markdown("""
 **Geospatial Enterprise Web Mapping** Developed with Streamlit, Folium & GeoPandas  
 **Dr. CAMARA MOC, PhD – Geomatics Engineering** © 2025
 """)
-
