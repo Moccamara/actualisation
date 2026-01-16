@@ -85,7 +85,6 @@ def load_se_data(url):
         if col not in gdf.columns:
             gdf[col] = 0
     return gdf
-
 try:
     gdf = load_se_data(SE_URL)
 except Exception:
@@ -145,7 +144,6 @@ with st.sidebar:
     st.markdown(f"**Logged in as:** {st.session_state.username} ({st.session_state.user_role})")
     if st.button("Logout"):
         logout()
-
     st.markdown("### 🗂️ Attribute Query")
     region = st.selectbox("Region", sorted(gdf["region"].dropna().unique()))
     gdf_r = gdf[gdf["region"] == region]
@@ -306,7 +304,6 @@ with col_chart:
                     st.dataframe(stats)
                 else:
                     st.dataframe(pts_in_polygon)
-
 with col_chart:
     # Population bar chart
     if idse_selected=="No filter":
@@ -358,4 +355,5 @@ st.markdown("""
 **Geospatial Enterprise Web Mapping** Developed with Streamlit, Folium & GeoPandas  
 **Dr. Mahamadou CAMARA, PhD – Geomatics Engineering** © 2025
 """)
+
 
